@@ -1,8 +1,21 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="he" dir="rtl"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>משימות השבוע</title>
-<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="משימות">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}img{max-width:100%}</style>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head><body>
 <style>
 /* Apple-style grouped lists and large titles, Google-style colors and motion */
 :root{
@@ -200,6 +213,16 @@ textarea{width:100%;border:0;border-radius:14px;background:var(--card);color:var
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 84px);transform:translate(-50%,20px);z-index:40;background:var(--fg);color:var(--bg);border-radius:12px;padding:10px 16px;font-size:15px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 
+.signin{display:grid;gap:16px;text-align:center;justify-items:center;padding:48px 8px}
+.signin .logo{width:84px;height:84px;border-radius:20px;box-shadow:var(--shadow)}
+.signin h1{font-size:30px}
+.signin p{margin:0;color:var(--fg2);font-size:15px;max-width:300px}
+.signin .btn{width:100%;max-width:320px}
+.err{color:var(--danger);font-size:14px}
+.acct{display:grid;gap:10px}
+.filebtn{display:block;text-align:center}
+.filebtn input{display:none}
+body.out .tabbar{display:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 <div dir="rtl" lang="he">
@@ -231,6 +254,7 @@ var TZ='Asia/Jerusalem';
 var app=document.getElementById('app'), sheet=document.getElementById('sheet'), sheetIn=document.getElementById('sheetIn'), scrim=document.getElementById('scrim');
 var data={weeks:{},general:[]}, tab='week', loaded=false, db=null, noStore=false;
 var saving=0, syncErr=false, queue=Promise.resolve();
+var user=undefined, authErr='';
 
 /* ---------- helpers ---------- */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -266,17 +290,17 @@ var ICON={
 };
 
 /* ---------- storage: the artifact's own database (no Claude involved) ---------- */
-function writeDoc(w){
-  var body=clone(wk(w)||{tasks:[]});
+function writeDoc(w,body){
   return db.doc('weeks/'+w).set(body).catch(function(e){
-    if(e&&e.code==='unavailable') return new Promise(function(r){setTimeout(r,400+Math.random()*600);}).then(function(){return db.doc('weeks/'+w).set(clone(wk(w)||{tasks:[]}));});
+    if(e&&e.code==='unavailable') return new Promise(function(r){setTimeout(r,400+Math.random()*600);}).then(function(){return db.doc('weeks/'+w).set(body);});
     throw e;
   });
 }
 function persist(w){
   if(!db){syncErr=true;paintSync();return;}
   saving++;syncErr=false;paintSync();
-  queue=queue.then(function(){return writeDoc(w);})
+  var body=clone(wk(w)||{tasks:[]});
+  queue=queue.then(function(){return writeDoc(w,body);})
     .then(function(){saving--;paintSync();},function(){saving--;syncErr=true;paintSync();});
 }
 function saveWeek(w){persist(w);}
@@ -302,7 +326,8 @@ function paintSync(){var el=document.getElementById('sync');if(!el)return;
 var editing=null, rendering=false;
 function isEd(k,w,id){return editing&&editing.k===k&&editing.id===id&&(k==='g'||editing.w===w);}
 function txtCell(k,w,t){
-  return '<div class="txt">'+esc(t.text)+'</div>';
+  if(isEd(k,w,t.id)) return '<input id="eInp" class="einp" maxlength="200" enterkeyhint="done" value="'+esc(editing.val)+'">';
+  return '<div class="txt" data-act="edit" data-k="'+k+'" data-w="'+w+'" data-id="'+esc(t.id)+'">'+esc(t.text)+'</div>';
 }
 function edBtn(){return '';}
 function findT(k,w,id){return (k==='g'?data.general:tasksOf(w)).filter(function(x){return x.id===id;})[0];}
@@ -325,16 +350,34 @@ function ring(done,total){var s=58,r=24,c=2*Math.PI*r,p=total?done/total:0;
 function checkBtn(w,t){return '<button class="check'+(t.done?' on':'')+'" data-act="toggle" data-w="'+w+'" data-id="'+esc(t.id)+'" aria-pressed="'+t.done+'" aria-label="סמן כבוצע">'+ICON.check+'</button>';}
 function taskRow(w,t){return '<div class="row'+(t.done?' done':'')+'">'+checkBtn(w,t)+'<div class="tbody">'+txtCell('w',w,t)+(isEd('w',w,t.id)?'':'<div class="acts">'+edBtn('w',w,t)+'<button class="mv" data-act="toGeneral" data-w="'+w+'" data-id="'+esc(t.id)+'">'+ICON.out+'העברה לכללי</button></div>')+'</div>'+(t.rolled?'<span class="chip roll">גולגלה '+(t.rolled>1?t.rolled+' פעמים':'פעם אחת')+'</span>':'')+'</div>';}
 
+function carryList(w){
+  var have=tasksOf(w).map(function(t){return t.text.trim();});
+  return tasksOf(addDays(w,-7)).filter(function(t){return !t.done&&!t.dismissed&&have.indexOf(t.text.trim())<0;});
+}
+function carry(id){
+  var cw=weekStart(today()),pw=addDays(cw,-7),t=tasksOf(pw).filter(function(x){return x.id===id;})[0];if(!t)return;
+  var ts=tasksOf(cw);
+  data.weeks[cw]=data.weeks[cw]||{};data.weeks[cw].tasks=ts.concat([{id:uid(),text:t.text,focus:false,done:false,doneAt:'',rolled:(t.rolled||0)+1}]);
+  vib();persist(cw);render();toast('הועברה לשבוע הזה');
+}
+function skipCarry(id){
+  var pw=addDays(weekStart(today()),-7),t=tasksOf(pw).filter(function(x){return x.id===id;})[0];if(!t)return;
+  t.dismissed=true;vib();persist(pw);render();
+}
 function renderWeek(){
   var t=today(), cw=weekStart(t), d=dow(t), ts=tasksOf(cw), done=ts.filter(function(x){return x.done;}).length;
   var h='';
-  if(noStore) h+='<div class="banner">השמירה זמינה רק כשהדף פתוח ב־Claude. שינויים כאן לא יישמרו.</div>';
+  if(noStore) h+='<div class="banner">אין חיבור לשמירה. שינויים כאן לא יישמרו.</div>';
   h+='<header class="head"><div><div class="eyebrow">'+range(cw)+'<span id="sync" class="sync" hidden></span></div><h1>השבוע</h1></div>'+(ts.length?ring(done,ts.length):'')+'</header>';
+  var cl=carryList(cw);
+  if(cl.length) h+='<div class="label" style="margin-top:0"><span>לא הושלמו בשבוע שעבר</span></div><div class="group" style="margin-bottom:22px">'+cl.map(function(t){
+    return '<div class="row"><div class="tbody"><div class="txt">'+esc(t.text)+'</div><div class="acts"><button class="mv" data-act="carry" data-id="'+esc(t.id)+'">'+ICON.plus.replace('width="22" height="22"','width="14" height="14"')+'העברה לשבוע הזה</button><button class="mv ed" data-act="skipCarry" data-id="'+esc(t.id)+'">לא רלוונטי</button></div></div>'+(t.rolled?'<span class="chip roll">×'+(t.rolled+1)+'</span>':'')+'</div>';}).join('')+'</div>';
   if(!ts.length){
     h+='<div class="card"><h2>עוד לא תכננת את השבוע</h2><p>בחר 5–7 משימות שחשובות לך השבוע.</p><button class="btn btn-primary" data-act="plan" data-w="'+cw+'">תכנון השבוע</button></div>';
   } else {
     h+='<div class="label" style="margin-top:0"><span>המשימות</span><button class="link" data-act="plan" data-w="'+cw+'">עריכה</button></div>';
-    h+='<div class="group">'+ts.map(function(x){return taskRow(cw,x);}).join('')+'</div>';
+    h+='<div class="group">'+ts.map(function(x){return taskRow(cw,x);}).join('')+
+      '<form class="gadd" id="wForm" autocomplete="off"><input id="wAdd" maxlength="200" placeholder="הוספת משימה לשבוע" enterkeyhint="done" value="'+esc(wText)+'"><button class="ibtn" type="submit" aria-label="הוספה"'+(wText.trim()?'':' disabled')+'>'+ICON.plus+'</button></form></div>';
     if(done===ts.length) h+='<div class="card mt"><h2>כל המשימות הושלמו</h2><p>שבוע מלא. אפשר לנוח עם זה.</p></div>';
   }
   if(d>=5){
@@ -346,13 +389,19 @@ function renderWeek(){
   return h;
 }
 
+var wText='';
+function wAddTask(){var v=wText.trim();if(!v)return;
+  var cw=weekStart(today()),ts=tasksOf(cw);
+  data.weeks[cw]=data.weeks[cw]||{};data.weeks[cw].tasks=ts.concat([{id:uid(),text:v,focus:false,done:false,doneAt:'',rolled:0}]);
+  wText='';vib();persist(cw);render();var i=document.getElementById('wAdd');i&&i.focus();}
+
 /* ---------- general list view ---------- */
 var gText='';
 function gSorted(){return data.general.slice().sort(function(a,b){return (a.done-b.done)||(a.done?(b.doneAt||'').localeCompare(a.doneAt||''):0)||(a.createdAt||0)-(b.createdAt||0);});}
 function renderGeneral(){
   var ls=gSorted(),open=ls.filter(function(t){return !t.done;}),dn=ls.filter(function(t){return t.done;});
   var h='';
-  if(noStore) h+='<div class="banner">השמירה זמינה רק כשהדף פתוח ב־Claude. שינויים כאן לא יישמרו.</div>';
+  if(noStore) h+='<div class="banner">אין חיבור לשמירה. שינויים כאן לא יישמרו.</div>';
   h+='<header class="head"><div><div class="eyebrow">'+(open.length?open.length+' פתוחות':'אין משימות פתוחות')+'<span id="sync" class="sync" hidden></span></div><h1>כללי</h1></div></header>';
   function row(t){return '<div class="row'+(t.done?' done':'')+'"><button class="check'+(t.done?' on':'')+'" data-act="gToggle" data-id="'+esc(t.id)+'" aria-pressed="'+!!t.done+'" aria-label="סמן כבוצע">'+ICON.check+'</button><div class="tbody">'+txtCell('g','',t)+(isEd('g','',t.id)?'':'<div class="acts">'+edBtn('g','',t)+(t.done?'':'<button class="mv" data-act="toWeek" data-id="'+esc(t.id)+'">'+ICON.out+'העברה לשבועי</button>')+'</div>')+'</div><button class="ibtn del" data-act="gDel" data-id="'+esc(t.id)+'" aria-label="מחיקה">'+ICON.del+'</button></div>';}
   if(ls.length) h+='<div class="label" style="margin-top:0"><span>המשימות</span><button class="link" data-act="genEdit">עריכה</button></div>';
@@ -369,7 +418,6 @@ function gAddTask(){var v=gText.trim();if(!v)return;
 function toWeek(id){
   var g=data.general.filter(function(x){return x.id===id;})[0];if(!g)return;
   var cw=weekStart(today()),ts=tasksOf(cw);
-  if(ts.length>=7){toast('ברשימה השבועית כבר 7 משימות');return;}
   data.weeks[cw]=data.weeks[cw]||{};data.weeks[cw].tasks=ts.concat([{id:uid(),text:g.text,focus:false,done:false,doneAt:'',rolled:0}]);
   data.general=data.general.filter(function(x){return x.id!==id;});
   vib();persist(cw);gDel(id).catch(function(){});render();toast('הועברה לרשימה השבועית');
@@ -433,16 +481,16 @@ function openPlan(w){
 }
 function blank(){return {id:uid(),text:'',focus:false,done:false,doneAt:'',rolled:0};}
 function suggestions(){
-  var prev=tasksOf(addDays(draft.w,-7)).filter(function(t){return !t.done;});
+  var prev=tasksOf(addDays(draft.w,-7)).filter(function(t){return !t.done&&!t.dismissed;});
   var have=draft.tasks.map(function(t){return t.text.trim();});
   return prev.filter(function(t){return have.indexOf(t.text.trim())<0;});
 }
 function filled(){return draft.tasks.filter(function(t){return t.text.trim();}).length;}
 function renderPlan(){
-  var sg=suggestions(),n=filled(),full=draft.tasks.length>=7;
+  var sg=suggestions(),n=filled(),full=false;
   var h='<div class="grab"></div><div class="sheet-head"><button class="cancel" data-act="close">ביטול</button><h3>'+range(draft.w)+'</h3><button class="save" data-act="savePlan" id="saveBtn"'+(n?'':' disabled')+'>שמירה</button></div>';
   if(sg.length&&!full) h+='<div class="hint"><span>לא הושלמו בשבוע שעבר</span></div><div class="sugs">'+sg.map(function(t,i){return '<button class="sug" data-act="addSug" data-i="'+i+'">'+ICON.plus.replace('width="22" height="22"','width="18" height="18"')+'<span>'+esc(t.text)+'</span>'+(t.rolled?'<em>×'+(t.rolled+1)+'</em>':'')+'</button>';}).join('')+'</div>';
-  h+='<div class="hint"><span>משימות לשבוע</span><span><b id="cnt">'+n+'</b> מתוך 5–7</span></div>';
+  h+='<div class="hint"><span>משימות לשבוע</span><span><b id="cnt">'+n+'</b> · מומלץ 5–7</span></div>';
   h+='<div class="group">'+draft.tasks.map(function(t,i){
     return '<div class="erow"><span class="num">'+(i+1)+'</span>'+
       '<input id="t'+t.id+'" data-i="'+i+'" value="'+esc(t.text)+'" placeholder="משימה '+(i+1)+'" maxlength="200" enterkeyhint="next" autocomplete="off">'+
@@ -506,6 +554,28 @@ function doSaveReview(){
   saveReview(w);closeSheet();render();
 }
 
+/* ---------- import sheet ---------- */
+function openImport(){
+  draft={kind:'import'};
+  sheetIn.innerHTML='<div class="grab"></div><div class="sheet-head"><button class="cancel" data-act="close">ביטול</button><h3>ייבוא נתונים</h3><button class="save" data-act="doImport" id="saveBtn">ייבוא</button></div>'+
+    '<div class="hint"><span>בחר קובץ גיבוי (JSON) או הדבק את התוכן שלו</span></div>'+
+    '<label class="btn btn-tonal filebtn">בחירת קובץ<input type="file" id="impFile" accept=".json,application/json"></label>'+
+    '<div class="hint"><span>או הדבקה</span></div><textarea id="impTxt" dir="ltr" placeholder="{&quot;weeks&quot;:{…},&quot;general&quot;:[…]}"></textarea>';
+  openSheet();
+}
+function doImport(){
+  var j;try{j=JSON.parse(document.getElementById('impTxt').value);}catch(e){toast('התוכן אינו JSON תקין');return;}
+  var nw=0,ng=0;
+  Object.keys(j.weeks||{}).forEach(function(k){if(!/^\d{4}-\d{2}-\d{2}$/.test(k))return;data.weeks[k]=j.weeks[k];persist(k);nw++;});
+  (j.general||[]).forEach(function(g){if(!g||!g.text)return;var t={id:g.id||uid(),text:g.text,done:!!g.done,doneAt:g.doneAt||'',createdAt:g.createdAt||Date.now()};
+    data.general=data.general.filter(function(x){return x.id!==t.id;}).concat([t]);gSet(t).catch(function(){});ng++;});
+  closeSheet();render();toast('יובאו '+nw+' שבועות ו־'+ng+' משימות כלליות');
+}
+sheetIn.addEventListener('change',function(e){
+  if(e.target.id!=='impFile'||!e.target.files[0])return;
+  var r=new FileReader();r.onload=function(){document.getElementById('impTxt').value=r.result;};r.readAsText(e.target.files[0]);
+});
+
 /* ---------- sheet plumbing ---------- */
 function openSheet(){scrim.classList.add('open');sheet.classList.add('open');sheet.scrollTop=0;}
 function closeSheet(){scrim.classList.remove('open');sheet.classList.remove('open');draft=null;if(document.activeElement)document.activeElement.blur();}
@@ -519,7 +589,7 @@ sheetIn.addEventListener('input',function(e){
 sheetIn.addEventListener('keydown',function(e){
   if(draft&&(draft.kind==='plan'||draft.kind==='gen')&&e.key==='Enter'&&e.target.matches('input[data-i]')){
     e.preventDefault();var i=+e.target.dataset.i,nx=sheetIn.querySelector('input[data-i="'+(i+1)+'"]');
-    if(nx)nx.focus();else if(draft.kind==='gen'||draft.tasks.length<7){draft.tasks.push(blank());reSheet();var l=sheetIn.querySelector('input[data-i="'+(i+1)+'"]');l&&l.focus();}else e.target.blur();
+    if(nx)nx.focus();else{draft.tasks.push(blank());reSheet();var l=sheetIn.querySelector('input[data-i="'+(i+1)+'"]');l&&l.focus();}
   }
 });
 sheetIn.addEventListener('click',function(e){
@@ -528,12 +598,13 @@ sheetIn.addEventListener('click',function(e){
   if(a==='savePlan')return savePlan();
   if(a==='saveReview')return doSaveReview();
   if(a==='saveGen')return saveGen();
+  if(a==='doImport')return doImport();
   if(a==='score'){draft.score=+b.dataset.v;[].forEach.call(document.querySelectorAll('#seg button'),function(x){x.classList.toggle('on',+x.dataset.v===draft.score);});document.getElementById('saveBtn').disabled=false;vib();return;}
   if(a==='add'){draft.tasks.push(blank());reSheet();var l=sheetIn.querySelector('input[data-i="'+(draft.tasks.length-1)+'"]');l&&l.focus();return;}
   if(a==='del'){draft.tasks.splice(i,1);if(!draft.tasks.length)draft.tasks.push(blank());reSheet();return;}
   if(a==='addSug'){var s=suggestions()[i];if(!s)return;var empty=draft.tasks.filter(function(t){return !t.text.trim();})[0];
     var nt={id:uid(),text:s.text,focus:false,done:false,doneAt:'',rolled:(s.rolled||0)+1};
-    if(empty)draft.tasks[draft.tasks.indexOf(empty)]=nt;else if(draft.tasks.length<7)draft.tasks.push(nt);renderPlan();}
+    if(empty)draft.tasks[draft.tasks.indexOf(empty)]=nt;else draft.tasks.push(nt);renderPlan();}
 });
 
 /* ---------- main ---------- */
@@ -541,14 +612,20 @@ app.addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;var a=b.dataset.act;
   if(a==='toggle'){var w=b.dataset.w,t=tasksOf(w).filter(function(x){return x.id===b.dataset.id;})[0];if(!t)return;
     t.done=!t.done;t.doneAt=t.done?todayStr():'';vib();saveWeek(w);render();return;}
+  if(a==='edit'){if(isEd(b.dataset.k,b.dataset.w,b.dataset.id))return;return startEdit(b.dataset.k,b.dataset.w,b.dataset.id);}
   if(a==='genEdit')return openGen();
   if(a==='toGeneral')return toGeneral(b.dataset.w,b.dataset.id);
   if(a==='toWeek')return toWeek(b.dataset.id);
+  if(a==='carry')return carry(b.dataset.id);
+  if(a==='skipCarry')return skipCarry(b.dataset.id);
   if(a==='gToggle'){var g=data.general.filter(function(x){return x.id===b.dataset.id;})[0];if(!g)return;
     g.done=!g.done;g.doneAt=g.done?todayStr():'';vib();gSet(g).catch(function(){});render();return;}
   if(a==='gDel'){var id=b.dataset.id;data.general=data.general.filter(function(x){return x.id!==id;});gDel(id).catch(function(){});render();return;}
   if(a==='plan')return openPlan(b.dataset.w);
   if(a==='review')return openReview(b.dataset.w);
+  if(a==='signin'){authErr='';if(window.WTApp.auth)window.WTApp.auth.signIn().catch(function(e){authErr='ההתחברות נכשלה ('+(e&&e.code||'שגיאה')+')';render();});return;}
+  if(a==='signout'){if(window.WTApp.auth)window.WTApp.auth.signOut();return;}
+  if(a==='import')return openImport();
 });
 app.addEventListener('click',function(e){if(e.target.id==='sync'&&syncErr)retryAll();});
 app.addEventListener('input',function(e){if(e.target.id==='gAdd'){gText=e.target.value;var s=e.target.form.querySelector('button');s.disabled=!gText.trim();}});
@@ -556,18 +633,30 @@ app.addEventListener('input',function(e){if(e.target.id==='eInp'&&editing)editin
 app.addEventListener('keydown',function(e){if(e.target.id!=='eInp')return;
   if(e.key==='Enter'){e.preventDefault();commitEdit();}else if(e.key==='Escape'){e.preventDefault();cancelEdit();}});
 app.addEventListener('focusout',function(e){if(e.target.id==='eInp'&&!rendering&&editing)setTimeout(function(){if(editing&&!rendering&&(!document.activeElement||document.activeElement.id!=='eInp'))commitEdit();},0);});
-app.addEventListener('submit',function(e){if(e.target.id==='gForm'){e.preventDefault();gAddTask();}});
+app.addEventListener('submit',function(e){if(e.target.id==='gForm'){e.preventDefault();gAddTask();}if(e.target.id==='wForm'){e.preventDefault();wAddTask();}});
+app.addEventListener('input',function(e){if(e.target.id==='wAdd'){wText=e.target.value;e.target.form.querySelector('button').disabled=!wText.trim();}});
 document.getElementById('tabs').addEventListener('click',function(e){var b=e.target.closest('[data-tab]');if(!b)return;if(editing)commitEdit();tab=b.dataset.tab;
   [].forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.toggle('on',x===b);});render();window.scrollTo(0,0);});
 
+function renderSignin(){
+  return '<div class="signin"><img class="logo" src="apple-touch-icon.png" alt=""><h1>משימות השבוע</h1><p>התחבר עם חשבון Google כדי שהמשימות יסתנכרנו בין הטלפון למחשב.</p>'+
+    '<button class="btn btn-primary" data-act="signin">התחברות עם Google</button>'+(authErr?'<div class="err">'+esc(authErr)+'</div>':'')+'</div>';
+}
+function renderAccount(){
+  if(!user) return '';
+  return '<div class="label"><span>חשבון</span></div><div class="card acct"><p>מחובר כ־'+esc(user.email||'')+'</p>'+
+    '<button class="btn btn-tonal" data-act="import">ייבוא נתונים</button><button class="btn btn-tonal" data-act="signout">התנתקות</button></div>';
+}
 function render(){
+  document.body.classList.toggle('out',user===null);
+  if(user===null){app.innerHTML=renderSignin();return;}
   if(!loaded){app.innerHTML='<header class="head"><div><div class="eyebrow">'+range(weekStart(today()))+'</div><h1>'+({week:'השבוע',general:'כללי',stats:'ניתוח'})[tab]+'</h1></div></header><div class="card"><p>טוען את המשימות שלך…</p></div>';return;}
-  var f=document.activeElement&&document.activeElement.id==='gAdd';
+  var fid=document.activeElement&&document.activeElement.id,f=fid==='gAdd'||fid==='wAdd';
   rendering=true;
-  app.innerHTML=tab==='week'?renderWeek():tab==='general'?renderGeneral():renderStats();paintSync();
+  app.innerHTML=tab==='week'?renderWeek():tab==='general'?renderGeneral():renderStats()+renderAccount();paintSync();
   rendering=false;
   var ei=document.getElementById('eInp');if(ei){ei.focus();var L=ei.value.length;ei.setSelectionRange(L,L);f=false;}
-  if(f){var i=document.getElementById('gAdd');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}}
+  if(f){var i=document.getElementById(fid);if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}}
 }
 function ready(d){
   db=d;
@@ -581,10 +670,62 @@ function ready(d){
     data.general=g;if(loaded)render();
   },function(){syncErr=true;paintSync();});
 }
+window.WTApp={
+  ready:ready,
+  setUser:function(u){user=u;render();},
+  authError:function(e){authErr='ההתחברות נכשלה ('+(e&&e.code||'שגיאה')+')';render();}
+};
 render();
-if(window.claude&&typeof window.claude.use==='function'){window.claude.use('db').then(ready,function(){ready(null);});}
-else ready(null);
 })();
+</script>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import {getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, doc, setDoc, deleteDoc, collection, onSnapshot} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC6zXP4w_lb9op00CjP-b2NhLJgLsVDBdc",
+  authDomain: "weekly-tasks-1abb9.firebaseapp.com",
+  projectId: "weekly-tasks-1abb9",
+  storageBucket: "weekly-tasks-1abb9.firebasestorage.app",
+  messagingSenderId: "54444780101",
+  appId: "1:54444780101:web:30b7a7b05448c9b520912c"
+};
+const W = window.WTApp;
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+let fs;
+try { fs = initializeFirestore(app, {ignoreUndefinedProperties: true, localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})}); }
+catch (e) { fs = initializeFirestore(app, {ignoreUndefinedProperties: true, localCache: memoryLocalCache()}); }
+
+W.auth = {
+  async signIn() {
+    const p = new GoogleAuthProvider();
+    p.setCustomParameters({prompt: 'select_account'});
+    try { await signInWithPopup(auth, p); }
+    catch (e) {
+      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') { await signInWithRedirect(auth, p); return; }
+      throw e;
+    }
+  },
+  signOut() { return signOut(auth).then(() => location.reload()); }
+};
+getRedirectResult(auth).catch(e => W.authError(e));
+
+let started = false;
+onAuthStateChanged(auth, u => {
+  if (!u) { W.setUser(null); return; }
+  W.setUser({email: u.email});
+  if (started) return;
+  started = true;
+  const base = 'users/' + u.uid + '/';
+  W.ready({
+    doc: p => ({ set: b => setDoc(doc(fs, base + p), b), delete: () => deleteDoc(doc(fs, base + p)) }),
+    collection: n => ({ onSnapshot: (cb, err) => onSnapshot(collection(fs, base + n),
+      s => cb({docs: s.docs.map(d => ({id: d.id, exists: true, data: () => d.data()}))}), err) })
+  });
+});
 </script>
 </div>
 
