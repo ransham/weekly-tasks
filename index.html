@@ -348,7 +348,7 @@ function cancelEdit(){editing=null;render();}
 function ring(done,total){var s=58,r=24,c=2*Math.PI*r,p=total?done/total:0;
   return '<div class="ring" style="width:'+s+'px;height:'+s+'px" aria-label="'+done+' מתוך '+total+' הושלמו"><svg viewBox="0 0 58 58"><circle class="bg" cx="29" cy="29" r="'+r+'" stroke-width="6"/><circle class="fg" cx="29" cy="29" r="'+r+'" stroke-width="6" stroke-dasharray="'+c.toFixed(2)+'" stroke-dashoffset="'+(c*(1-p)).toFixed(2)+'" transform="rotate(-90 29 29)"/></svg><span>'+done+'/'+total+'</span></div>';}
 function checkBtn(w,t){return '<button class="check'+(t.done?' on':'')+'" data-act="toggle" data-w="'+w+'" data-id="'+esc(t.id)+'" aria-pressed="'+t.done+'" aria-label="סמן כבוצע">'+ICON.check+'</button>';}
-function taskRow(w,t){return '<div class="row'+(t.done?' done':'')+'">'+checkBtn(w,t)+'<div class="tbody">'+txtCell('w',w,t)+(isEd('w',w,t.id)?'':'<div class="acts">'+edBtn('w',w,t)+'<button class="mv" data-act="toGeneral" data-w="'+w+'" data-id="'+esc(t.id)+'">'+ICON.out+'העברה לכללי</button></div>')+'</div>'+(t.rolled?'<span class="chip roll">גולגלה '+(t.rolled>1?t.rolled+' פעמים':'פעם אחת')+'</span>':'')+'</div>';}
+function taskRow(w,t){return '<div class="row'+(t.done?' done':'')+'">'+checkBtn(w,t)+'<div class="tbody">'+txtCell('w',w,t)+(isEd('w',w,t.id)?'':'<div class="acts">'+edBtn('w',w,t)+'<button class="mv" data-act="toGeneral" data-w="'+w+'" data-id="'+esc(t.id)+'">'+ICON.out+'העברה לכללי</button></div>')+'</div>'+(t.rolled?'<span class="chip roll">גולגלה '+(t.rolled>1?esc(t.rolled)+' פעמים':'פעם אחת')+'</span>':'')+'</div>';}
 
 function carryList(w){
   var have=tasksOf(w).map(function(t){return t.text.trim();});
@@ -371,7 +371,7 @@ function renderWeek(){
   h+='<header class="head"><div><div class="eyebrow">'+range(cw)+'<span id="sync" class="sync" hidden></span></div><h1>השבוע</h1></div>'+(ts.length?ring(done,ts.length):'')+'</header>';
   var cl=carryList(cw);
   if(cl.length) h+='<div class="label" style="margin-top:0"><span>לא הושלמו בשבוע שעבר</span></div><div class="group" style="margin-bottom:22px">'+cl.map(function(t){
-    return '<div class="row"><div class="tbody"><div class="txt">'+esc(t.text)+'</div><div class="acts"><button class="mv" data-act="carry" data-id="'+esc(t.id)+'">'+ICON.plus.replace('width="22" height="22"','width="14" height="14"')+'העברה לשבוע הזה</button><button class="mv ed" data-act="skipCarry" data-id="'+esc(t.id)+'">לא רלוונטי</button></div></div>'+(t.rolled?'<span class="chip roll">×'+(t.rolled+1)+'</span>':'')+'</div>';}).join('')+'</div>';
+    return '<div class="row"><div class="tbody"><div class="txt">'+esc(t.text)+'</div><div class="acts"><button class="mv" data-act="carry" data-id="'+esc(t.id)+'">'+ICON.plus.replace('width="22" height="22"','width="14" height="14"')+'העברה לשבוע הזה</button><button class="mv ed" data-act="skipCarry" data-id="'+esc(t.id)+'">לא רלוונטי</button></div></div>'+(t.rolled?'<span class="chip roll">×'+esc((+t.rolled||0)+1)+'</span>':'')+'</div>';}).join('')+'</div>';
   if(!ts.length){
     h+='<div class="card"><h2>עוד לא תכננת את השבוע</h2><p>בחר 5–7 משימות שחשובות לך השבוע.</p><button class="btn btn-primary" data-act="plan" data-w="'+cw+'">תכנון השבוע</button></div>';
   } else {
@@ -383,7 +383,7 @@ function renderWeek(){
   if(d>=5){
     var nw=addDays(cw,7), nts=tasksOf(nw), rev=wk(cw)&&wk(cw).review;
     h+='<div class="label"><span>סוף השבוע</span></div><div class="stack">';
-    if(ts.length) h+='<div class="card"><h2>סיכום שבועי</h2>'+(rev&&rev.score?'<p>נתת לשבוע ציון '+rev.score+' מתוך 5.</p><button class="btn btn-tonal" data-act="review" data-w="'+cw+'">עריכת הסיכום</button>':'<p>שלושים שניות: ציון לשבוע ושתי שאלות קצרות.</p><button class="btn btn-primary" data-act="review" data-w="'+cw+'">לסיכום השבוע</button>')+'</div>';
+    if(ts.length) h+='<div class="card"><h2>סיכום שבועי</h2>'+(rev&&rev.score?'<p>נתת לשבוע ציון '+esc(rev.score)+' מתוך 5.</p><button class="btn btn-tonal" data-act="review" data-w="'+cw+'">עריכת הסיכום</button>':'<p>שלושים שניות: ציון לשבוע ושתי שאלות קצרות.</p><button class="btn btn-primary" data-act="review" data-w="'+cw+'">לסיכום השבוע</button>')+'</div>';
     h+='<div class="card"><h2>השבוע הבא · '+range(nw)+'</h2>'+(nts.length?'<p>'+nts.length+' משימות מתוכננות.</p><button class="btn btn-tonal" data-act="plan" data-w="'+nw+'">עריכת התכנון</button>':'<p>אפשר לתכנן כבר עכשיו, ומשימות שלא הושלמו יוצעו לך.</p><button class="btn btn-primary" data-act="plan" data-w="'+nw+'">תכנון השבוע הבא</button>')+'</div></div>';
   }
   return h;
@@ -447,7 +447,7 @@ function renderStats(){
   // rolled
   var rolled={};Object.keys(data.weeks).forEach(function(w){tasksOf(w).forEach(function(t){if(t.rolled>=2){var k=t.text.trim();if(!rolled[k]||rolled[k].n<t.rolled)rolled[k]={n:t.rolled,done:t.done};}});});
   var rk=Object.keys(rolled).sort(function(a,b){return rolled[b].n-rolled[a].n;}).slice(0,5);
-  if(rk.length){h+='<div class="label"><span>משימות שחוזרות שוב ושוב</span></div><div class="group">'+rk.map(function(k){return '<div class="row'+(rolled[k].done?' done':'')+'"><div class="txt">'+esc(k)+'</div><span class="chip roll">'+rolled[k].n+' שבועות</span></div>';}).join('')+'</div>';}
+  if(rk.length){h+='<div class="label"><span>משימות שחוזרות שוב ושוב</span></div><div class="group">'+rk.map(function(k){return '<div class="row'+(rolled[k].done?' done':'')+'"><div class="txt">'+esc(k)+'</div><span class="chip roll">'+esc(rolled[k].n)+' שבועות</span></div>';}).join('')+'</div>';}
   // history
   var hist=Object.keys(data.weeks).filter(function(w){return tasksOf(w).length&&w<=cw;}).sort().reverse();
   h+='<div class="label"><span>היסטוריה</span></div><details class="group hist"><summary><span class="wk">כל השבועות<small>'+hist.length+' שבועות · לחץ לפתיחה</small></span><span class="chev">›</span></summary>'+hist.map(function(w){
@@ -455,7 +455,7 @@ function renderStats(){
     var cls=p>=70?'g':p>=40?'y':'r';
     var body='<div class="wk-tasks">'+ts.map(function(t){return '<div class="'+(t.done?'d':'')+'"><i>'+(t.done?'✓':'·')+'</i><span>'+esc(t.text)+''+'</span></div>';}).join('')+
       (rv&&(rv.worked||rv.blocked)?'<div class="wk-note">'+(rv.worked?'<div>מה עבד: '+esc(rv.worked)+'</div>':'')+(rv.blocked?'<div>מה תקע: '+esc(rv.blocked)+'</div>':'')+'</div>':'')+'</div>';
-    return '<details class="row"><summary><div class="wk">'+range(w)+(w===cw?' · השבוע':'')+'<small>'+(rv&&rv.score?'ציון '+rv.score+' מתוך 5':'ללא סיכום')+'</small></div><span class="frac">'+dn+'/'+ts.length+'</span><span class="pill '+cls+'">'+p+'%</span></summary>'+body+'</details>';
+    return '<details class="row"><summary><div class="wk">'+range(w)+(w===cw?' · השבוע':'')+'<small>'+(rv&&rv.score?'ציון '+esc(rv.score)+' מתוך 5':'ללא סיכום')+'</small></div><span class="frac">'+dn+'/'+ts.length+'</span><span class="pill '+cls+'">'+p+'%</span></summary>'+body+'</details>';
   }).join('')+'</details>';
   return h;
 }
@@ -493,7 +493,7 @@ function renderPlan(){
   h+='<div class="hint"><span>משימות לשבוע</span><span><b id="cnt">'+n+'</b> · מומלץ 5–7</span></div>';
   h+='<div class="group">'+draft.tasks.map(function(t,i){
     return '<div class="erow"><span class="num">'+(i+1)+'</span>'+
-      '<input id="t'+t.id+'" data-i="'+i+'" value="'+esc(t.text)+'" placeholder="משימה '+(i+1)+'" maxlength="200" enterkeyhint="next" autocomplete="off">'+
+      '<input id="t'+esc(t.id)+'" data-i="'+i+'" value="'+esc(t.text)+'" placeholder="משימה '+(i+1)+'" maxlength="200" enterkeyhint="next" autocomplete="off">'+
       '<button class="ibtn del" data-act="del" data-i="'+i+'" aria-label="מחיקה">'+ICON.del+'</button></div>';
   }).join('')+(full?'':'<button class="addrow" data-act="add">'+ICON.plus+'הוספת משימה</button>')+'</div>';
   sheetIn.innerHTML=h;
@@ -563,11 +563,16 @@ function openImport(){
     '<div class="hint"><span>או הדבקה</span></div><textarea id="impTxt" dir="ltr" placeholder="{&quot;weeks&quot;:{…},&quot;general&quot;:[…]}"></textarea>';
   openSheet();
 }
+function cleanId(v){v=String(v==null?'':v);return /^[A-Za-z0-9_-]{1,40}$/.test(v)?v:uid();}
+function cleanWeek(w){w=(w&&typeof w==='object')?w:{};var out={tasks:(Array.isArray(w.tasks)?w.tasks:[]).filter(function(t){return t&&t.text;}).map(function(t){
+  var o={id:cleanId(t.id),text:String(t.text).slice(0,500),focus:false,done:!!t.done,doneAt:typeof t.doneAt==='string'?t.doneAt.slice(0,40):'',rolled:Math.max(0,Math.min(99,parseInt(t.rolled,10)||0))};if(t.dismissed)o.dismissed=true;return o;})};
+  if(w.review&&typeof w.review==='object'){var sc=parseInt(w.review.score,10);out.review={score:(sc>=1&&sc<=5)?sc:0,worked:String(w.review.worked||'').slice(0,2000),blocked:String(w.review.blocked||'').slice(0,2000)};}
+  return out;}
 function doImport(){
   var j;try{j=JSON.parse(document.getElementById('impTxt').value);}catch(e){toast('התוכן אינו JSON תקין');return;}
   var nw=0,ng=0;
-  Object.keys(j.weeks||{}).forEach(function(k){if(!/^\d{4}-\d{2}-\d{2}$/.test(k))return;data.weeks[k]=j.weeks[k];persist(k);nw++;});
-  (j.general||[]).forEach(function(g){if(!g||!g.text)return;var t={id:g.id||uid(),text:g.text,done:!!g.done,doneAt:g.doneAt||'',createdAt:g.createdAt||Date.now()};
+  Object.keys(j.weeks||{}).forEach(function(k){if(!/^\d{4}-\d{2}-\d{2}$/.test(k))return;data.weeks[k]=cleanWeek(j.weeks[k]);persist(k);nw++;});
+  (j.general||[]).forEach(function(g){if(!g||!g.text)return;var t={id:cleanId(g.id),text:String(g.text).slice(0,500),done:!!g.done,doneAt:g.doneAt||'',createdAt:g.createdAt||Date.now()};
     data.general=data.general.filter(function(x){return x.id!==t.id;}).concat([t]);gSet(t).catch(function(){});ng++;});
   closeSheet();render();toast('יובאו '+nw+' שבועות ו־'+ng+' משימות כלליות');
 }
