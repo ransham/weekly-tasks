@@ -14,7 +14,10 @@
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}img{max-width:100%}</style>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js">
 </head><body>
 <style>
 /* Apple-style grouped lists and large titles, Google-style colors and motion */
@@ -253,7 +256,10 @@ body.out .tabbar{display:none}
 var TZ='Asia/Jerusalem';
 var app=document.getElementById('app'), sheet=document.getElementById('sheet'), sheetIn=document.getElementById('sheetIn'), scrim=document.getElementById('scrim');
 var data={weeks:{},general:[]}, tab='week', loaded=false, db=null, noStore=false;
-var saving=0, syncErr=false, queue=Promise.resolve();
+var saving=0, syncErr=false, queue=Promise.resolve(), pend=[];
+var CK='wt-cache-v1';
+function saveCache(){try{localStorage.setItem(CK,JSON.stringify({weeks:data.weeks,general:data.general,email:user&&user.email||''}));}catch(e){}}
+function clearCache(){try{localStorage.removeItem(CK);}catch(e){}}
 var user=undefined, authErr='';
 
 /* ---------- helpers ---------- */
@@ -297,6 +303,7 @@ function writeDoc(w,body){
   });
 }
 function persist(w){
+  if(!db&&!noStore){pend.push(function(){persist(w);});saveCache();return;}
   if(!db){syncErr=true;paintSync();return;}
   saving++;syncErr=false;paintSync();
   var body=clone(wk(w)||{tasks:[]});
@@ -305,6 +312,7 @@ function persist(w){
 }
 function saveWeek(w){persist(w);}
 function gOp(fn){
+  if(!db&&!noStore){saveCache();return new Promise(function(res,rej){pend.push(function(){gOp(fn).then(res,rej);});});}
   if(!db){syncErr=true;paintSync();return Promise.reject(new Error('nodb'));}
   saving++;syncErr=false;paintSync();
   var p=queue.then(fn);
@@ -666,18 +674,21 @@ function render(){
 function ready(d){
   db=d;
   if(!db){noStore=true;loaded=true;render();return;}
+  var q=pend;pend=[];q.forEach(function(f){f();});
   db.collection('weeks').onSnapshot(function(snap){
     var w={};snap.docs.forEach(function(doc){if(doc.exists)w[doc.id]=clone(doc.data());});
-    data.weeks=w;loaded=true;render();
+    data.weeks=w;loaded=true;saveCache();render();
   },function(){syncErr=true;paintSync();});
   db.collection('general').onSnapshot(function(snap){
     var g=[];snap.docs.forEach(function(doc){if(doc.exists){var x=clone(doc.data());x.id=doc.id;g.push(x);}});
-    data.general=g;if(loaded)render();
+    data.general=g;saveCache();if(loaded)render();
   },function(){syncErr=true;paintSync();});
 }
+/* show last known data immediately, live data replaces it when it arrives */
+try{var c0=JSON.parse(localStorage.getItem(CK)||'null');if(c0&&c0.weeks){data.weeks=c0.weeks;data.general=c0.general||[];user={email:c0.email||''};loaded=true;render();}}catch(e){}
 window.WTApp={
   ready:ready,
-  setUser:function(u){user=u;render();},
+  setUser:function(u){if(u===null){clearCache();if(loaded&&!db){data={weeks:{},general:[]};loaded=false;}}user=u;render();},
   authError:function(e){authErr='ההתחברות נכשלה ('+(e&&e.code||'שגיאה')+')';render();}
 };
 render();
@@ -685,7 +696,7 @@ render();
 </script>
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import {getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, doc, setDoc, deleteDoc, collection, onSnapshot} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -698,7 +709,8 @@ const firebaseConfig = {
 };
 const W = window.WTApp;
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+// No popup/redirect resolver at startup: it loads a heavy Google iframe on every launch. It is passed only when signing in.
+const auth = initializeAuth(app, {persistence: [indexedDBLocalPersistence, browserLocalPersistence]});
 let fs;
 try { fs = initializeFirestore(app, {ignoreUndefinedProperties: true, localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})}); }
 catch (e) { fs = initializeFirestore(app, {ignoreUndefinedProperties: true, localCache: memoryLocalCache()}); }
@@ -707,16 +719,18 @@ W.auth = {
   async signIn() {
     const p = new GoogleAuthProvider();
     p.setCustomParameters({prompt: 'select_account'});
-    try { await signInWithPopup(auth, p); }
+    try { await signInWithPopup(auth, p, browserPopupRedirectResolver); }
     catch (e) {
       if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
-      if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') { await signInWithRedirect(auth, p); return; }
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') { try { localStorage.setItem('wt-redir', '1'); } catch (_) {} await signInWithRedirect(auth, p, browserPopupRedirectResolver); return; }
       throw e;
     }
   },
   signOut() { return signOut(auth).then(() => location.reload()); }
 };
-getRedirectResult(auth).catch(e => W.authError(e));
+let pendingRedirect = false;
+try { pendingRedirect = localStorage.getItem('wt-redir') === '1'; localStorage.removeItem('wt-redir'); } catch (_) {}
+if (pendingRedirect) getRedirectResult(auth, browserPopupRedirectResolver).catch(e => W.authError(e));
 
 let started = false;
 onAuthStateChanged(auth, u => {
