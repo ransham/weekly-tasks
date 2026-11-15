@@ -151,6 +151,13 @@ details.row summary .frac::after{content:""}
 .wk-tasks i{font-style:normal;width:16px;flex:none;color:var(--done)}
 .wk-note{font-size:14px;color:var(--fg2);border-top:.5px solid var(--sep);padding-top:8px;margin-top:4px}
 .empty{color:var(--fg2);font-size:15px;text-align:center;padding:28px 16px}
+.wnav{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.wnav button{appearance:none;border:0;background:var(--fill);color:var(--accent);border-radius:999px;padding:6px 12px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.wnav button[disabled]{opacity:.35;pointer-events:none}
+.wnav .now{background:var(--accent-soft)}
+.wnav .sp{flex:1}
+.past-note{font-size:13px;color:var(--fg2);margin:-12px 0 18px}
+.wk-open{margin-top:6px;justify-self:start}
 
 /* tab bar */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--bar);
@@ -373,33 +380,41 @@ function skipCarry(id){
   t.dismissed=true;vib();persist(pw);render();
 }
 function renderWeek(){
-  var t=today(), cw=weekStart(t), d=dow(t), ts=tasksOf(cw), done=ts.filter(function(x){return x.done;}).length;
+  var t=today(), real=weekStart(t), cw=viewW(), past=cw<real, d=past?6:dow(t), ts=tasksOf(cw), done=ts.filter(function(x){return x.done;}).length;
   var h='';
   if(noStore) h+='<div class="banner">אין חיבור לשמירה. שינויים כאן לא יישמרו.</div>';
-  h+='<header class="head"><div><div class="eyebrow">'+range(cw)+'<span id="sync" class="sync" hidden></span></div><h1>השבוע</h1></div>'+(ts.length?ring(done,ts.length):'')+'</header>';
-  var cl=carryList(cw);
+  var ago=Math.round((P(real)-P(cw))/(7*864e5));
+  h+='<div class="wnav"><button data-act="wPrev"'+(cw<=firstW()?' disabled':'')+' aria-label="שבוע קודם">› שבוע קודם</button><span class="sp"></span>'+(past?'<button class="now" data-act="wNow">לשבוע הנוכחי</button><button data-act="wNext" aria-label="שבוע הבא">שבוע הבא ‹</button>':'')+'</div>';
+  h+='<header class="head"><div><div class="eyebrow">'+range(cw)+'<span id="sync" class="sync" hidden></span></div><h1>'+(!past?'השבוע':ago===1?'שבוע שעבר':'לפני '+ago+' שבועות')+'</h1></div>'+(ts.length?ring(done,ts.length):'')+'</header>';
+  if(past) h+='<p class="past-note">עריכה בדיעבד. שינויים כאן מעדכנים את הניתוח.</p>';
+  var cl=past?[]:carryList(cw);
   if(cl.length) h+='<div class="label" style="margin-top:0"><span>לא הושלמו בשבוע שעבר</span></div><div class="group" style="margin-bottom:22px">'+cl.map(function(t){
     return '<div class="row"><div class="tbody"><div class="txt">'+esc(t.text)+'</div><div class="acts"><button class="mv" data-act="carry" data-id="'+esc(t.id)+'">'+ICON.plus.replace('width="22" height="22"','width="14" height="14"')+'העברה לשבוע הזה</button><button class="mv ed" data-act="skipCarry" data-id="'+esc(t.id)+'">לא רלוונטי</button></div></div>'+(t.rolled?'<span class="chip roll">×'+esc((+t.rolled||0)+1)+'</span>':'')+'</div>';}).join('')+'</div>';
   if(!ts.length){
-    h+='<div class="card"><h2>עוד לא תכננת את השבוע</h2><p>בחר 5–7 משימות שחשובות לך השבוע.</p><button class="btn btn-primary" data-act="plan" data-w="'+cw+'">תכנון השבוע</button></div>';
+    h+=past?'<div class="card"><h2>לא תוכננו משימות לשבוע הזה</h2><p>אפשר להוסיף אותן עכשיו בדיעבד.</p><button class="btn btn-primary" data-act="plan" data-w="'+cw+'">הוספת משימות</button></div>'
+      :'<div class="card"><h2>עוד לא תכננת את השבוע</h2><p>בחר 5–7 משימות שחשובות לך השבוע.</p><button class="btn btn-primary" data-act="plan" data-w="'+cw+'">תכנון השבוע</button></div>';
   } else {
     h+='<div class="label" style="margin-top:0"><span>המשימות</span><button class="link" data-act="plan" data-w="'+cw+'">עריכה</button></div>';
     h+='<div class="group">'+ts.map(function(x){return taskRow(cw,x);}).join('')+
       '<form class="gadd" id="wForm" autocomplete="off"><input id="wAdd" maxlength="200" placeholder="הוספת משימה לשבוע" enterkeyhint="done" value="'+esc(wText)+'"><button class="ibtn" type="submit" aria-label="הוספה"'+(wText.trim()?'':' disabled')+'>'+ICON.plus+'</button></form></div>';
-    if(done===ts.length) h+='<div class="card mt"><h2>כל המשימות הושלמו</h2><p>שבוע מלא. אפשר לנוח עם זה.</p></div>';
+    if(done===ts.length&&!past) h+='<div class="card mt"><h2>כל המשימות הושלמו</h2><p>שבוע מלא. אפשר לנוח עם זה.</p></div>';
   }
-  if(d>=5){
+  if(d>=5&&(!past||ts.length)){
     var nw=addDays(cw,7), nts=tasksOf(nw), rev=wk(cw)&&wk(cw).review;
-    h+='<div class="label"><span>סוף השבוע</span></div><div class="stack">';
+    h+='<div class="label"><span>'+(past?'סיכום':'סוף השבוע')+'</span></div><div class="stack">';
     if(ts.length) h+='<div class="card"><h2>סיכום שבועי</h2>'+(rev&&rev.score?'<p>נתת לשבוע ציון '+esc(rev.score)+' מתוך 5.</p><button class="btn btn-tonal" data-act="review" data-w="'+cw+'">עריכת הסיכום</button>':'<p>שלושים שניות: ציון לשבוע ושתי שאלות קצרות.</p><button class="btn btn-primary" data-act="review" data-w="'+cw+'">לסיכום השבוע</button>')+'</div>';
-    h+='<div class="card"><h2>השבוע הבא · '+range(nw)+'</h2>'+(nts.length?'<p>'+nts.length+' משימות מתוכננות.</p><button class="btn btn-tonal" data-act="plan" data-w="'+nw+'">עריכת התכנון</button>':'<p>אפשר לתכנן כבר עכשיו, ומשימות שלא הושלמו יוצעו לך.</p><button class="btn btn-primary" data-act="plan" data-w="'+nw+'">תכנון השבוע הבא</button>')+'</div></div>';
+    if(!past) h+='<div class="card"><h2>השבוע הבא · '+range(nw)+'</h2>'+(nts.length?'<p>'+nts.length+' משימות מתוכננות.</p><button class="btn btn-tonal" data-act="plan" data-w="'+nw+'">עריכת התכנון</button>':'<p>אפשר לתכנן כבר עכשיו, ומשימות שלא הושלמו יוצעו לך.</p><button class="btn btn-primary" data-act="plan" data-w="'+nw+'">תכנון השבוע הבא</button>')+'</div>';
+    h+='</div>';
   }
   return h;
 }
 
-var wText='';
+var wText='', vw=null;
+function viewW(){var cw=weekStart(today());return vw&&vw<cw?vw:cw;}
+function firstW(){var ks=Object.keys(data.weeks).filter(function(w){return tasksOf(w).length;}).sort();return ks[0]||weekStart(today());}
+function goWeek(w){if(editing)commitEdit();var cw=weekStart(today());vw=(w>=cw)?null:w;wText='';render();window.scrollTo(0,0);}
 function wAddTask(){var v=wText.trim();if(!v)return;
-  var cw=weekStart(today()),ts=tasksOf(cw);
+  var cw=viewW(),ts=tasksOf(cw);
   data.weeks[cw]=data.weeks[cw]||{};data.weeks[cw].tasks=ts.concat([{id:uid(),text:v,focus:false,done:false,doneAt:'',rolled:0}]);
   wText='';vib();persist(cw);render();var i=document.getElementById('wAdd');i&&i.focus();}
 
@@ -462,7 +477,7 @@ function renderStats(){
     var ts=tasksOf(w),p=pct(ts),dn=ts.filter(function(t){return t.done;}).length,rv=wk(w).review;
     var cls=p>=70?'g':p>=40?'y':'r';
     var body='<div class="wk-tasks">'+ts.map(function(t){return '<div class="'+(t.done?'d':'')+'"><i>'+(t.done?'✓':'·')+'</i><span>'+esc(t.text)+''+'</span></div>';}).join('')+
-      (rv&&(rv.worked||rv.blocked)?'<div class="wk-note">'+(rv.worked?'<div>מה עבד: '+esc(rv.worked)+'</div>':'')+(rv.blocked?'<div>מה תקע: '+esc(rv.blocked)+'</div>':'')+'</div>':'')+'</div>';
+      (rv&&(rv.worked||rv.blocked)?'<div class="wk-note">'+(rv.worked?'<div>מה עבד: '+esc(rv.worked)+'</div>':'')+(rv.blocked?'<div>מה תקע: '+esc(rv.blocked)+'</div>':'')+'</div>':'')+'<button class="mv ed wk-open" data-act="openWeek" data-w="'+w+'">'+ICON.pen+'עריכת השבוע</button></div>';
     return '<details class="row"><summary><div class="wk">'+range(w)+(w===cw?' · השבוע':'')+'<small>'+(rv&&rv.score?'ציון '+esc(rv.score)+' מתוך 5':'ללא סיכום')+'</small></div><span class="frac">'+dn+'/'+ts.length+'</span><span class="pill '+cls+'">'+p+'%</span></summary>'+body+'</details>';
   }).join('')+'</details>';
   return h;
@@ -624,7 +639,14 @@ sheetIn.addEventListener('click',function(e){
 app.addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;var a=b.dataset.act;
   if(a==='toggle'){var w=b.dataset.w,t=tasksOf(w).filter(function(x){return x.id===b.dataset.id;})[0];if(!t)return;
-    t.done=!t.done;t.doneAt=t.done?todayStr():'';vib();saveWeek(w);render();return;}
+    var real=weekStart(today()),end=addDays(w,6);
+    t.done=!t.done;t.doneAt=t.done?(end<todayStr()?end:todayStr()):'';vib();saveWeek(w);render();
+    if(t.done&&w<real&&tasksOf(real).some(function(x){return !x.done&&x.text.trim()===t.text.trim();}))toast('סומנה. היא מופיעה גם ברשימה של השבוע הנוכחי');
+    return;}
+  if(a==='wPrev')return goWeek(addDays(viewW(),-7));
+  if(a==='wNext')return goWeek(addDays(viewW(),7));
+  if(a==='wNow')return goWeek(weekStart(today()));
+  if(a==='openWeek'){tab='week';[].forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.toggle('on',x.dataset.tab==='week');});return goWeek(b.dataset.w);}
   if(a==='edit'){if(isEd(b.dataset.k,b.dataset.w,b.dataset.id))return;return startEdit(b.dataset.k,b.dataset.w,b.dataset.id);}
   if(a==='genEdit')return openGen();
   if(a==='toGeneral')return toGeneral(b.dataset.w,b.dataset.id);
@@ -648,7 +670,7 @@ app.addEventListener('keydown',function(e){if(e.target.id!=='eInp')return;
 app.addEventListener('focusout',function(e){if(e.target.id==='eInp'&&!rendering&&editing)setTimeout(function(){if(editing&&!rendering&&(!document.activeElement||document.activeElement.id!=='eInp'))commitEdit();},0);});
 app.addEventListener('submit',function(e){if(e.target.id==='gForm'){e.preventDefault();gAddTask();}if(e.target.id==='wForm'){e.preventDefault();wAddTask();}});
 app.addEventListener('input',function(e){if(e.target.id==='wAdd'){wText=e.target.value;e.target.form.querySelector('button').disabled=!wText.trim();}});
-document.getElementById('tabs').addEventListener('click',function(e){var b=e.target.closest('[data-tab]');if(!b)return;if(editing)commitEdit();tab=b.dataset.tab;
+document.getElementById('tabs').addEventListener('click',function(e){var b=e.target.closest('[data-tab]');if(!b)return;if(editing)commitEdit();if(b.dataset.tab==='week')vw=null;tab=b.dataset.tab;
   [].forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.toggle('on',x===b);});render();window.scrollTo(0,0);});
 
 function renderSignin(){
